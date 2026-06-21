@@ -1,29 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from './firebase';
 import Objectifs from './components/Objectifs';
 import ProfilMental from './components/ProfilMental';
 import SuiviPrepa from './components/SuiviPrepa';
 
-const STORAGE_KEY = 'backyard_prep_v1';
-
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-function saveData(data) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
-}
+// ID fixe du client — une seule personne utilise cette app
+const CLIENT_ID = 'thomas';
 
 export default function App() {
   const [tab, setTab] = useState('objectifs');
-  const [data, setData] = useState(loadData);
+  const [data, setData] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const save = (key, val) => {
+  // Chargement initial depuis Firebase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const docRef = doc(db, 'clients', CLIENT_ID);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setData(docSnap.data());
+        }
+      } catch (e) {
+        console.error('Erreur chargement:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Sauvegarde sur Firebase
+  const save = async (key, val) => {
     const updated = { ...data, [key]: val };
     setData(updated);
-    saveData(updated);
+    setSaving(true);
+    try {
+      await setDoc(doc(db, 'clients', CLIENT_ID), updated);
+    } catch (e) {
+      console.error('Erreur sauvegarde:', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const daysLeft = data.objectifs?.raceDate
@@ -36,20 +56,32 @@ export default function App() {
     { id: 'suivi', label: 'Suivi', icon: '📊' },
   ];
 
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 32 }}>🏃</div>
+        <div style={{ fontSize: 14, color: 'var(--gray-400)' }}>Chargement...</div>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.app}>
       <header style={styles.header}>
         <div style={styles.headerTop}>
           <div>
             <div style={styles.logo}>Backyard Ultra</div>
-            <div style={styles.logoSub}>Préparation mentale</div>
+            <div style={styles.logoSub}>Préparation mentale · Thomas</div>
           </div>
-          {daysLeft !== null && daysLeft > 0 && (
-            <div style={styles.countdown}>
-              <div style={styles.countdownNum}>J−{daysLeft}</div>
-              <div style={styles.countdownLabel}>avant la course</div>
-            </div>
-          )}
+          <div style={{ textAlign: 'right' }}>
+            {daysLeft !== null && daysLeft > 0 && (
+              <div style={styles.countdown}>
+                <div style={styles.countdownNum}>J−{daysLeft}</div>
+                <div style={styles.countdownLabel}>avant la course</div>
+              </div>
+            )}
+            {saving && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>Sauvegarde...</div>}
+          </div>
         </div>
         <nav style={styles.nav}>
           {tabs.map(t => (
